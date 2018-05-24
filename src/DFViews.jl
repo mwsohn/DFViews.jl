@@ -1,6 +1,6 @@
 module DFViews
 
-using DataFrames, Electron
+using DataFrames, Electron, Labels
 
 export dfview
 
@@ -40,7 +40,7 @@ function etype(df::DataFrame,v::Symbol)
     return eltyp
 end
 
-function dfview(df::DataFrame, label::Dict = Dict(); width=800, height=850)
+function dfview(df::DataFrame, label::Union{Label,Void} = nothing; width=800, height=850)
 
     bdata = IOBuffer()
 
@@ -78,12 +78,12 @@ function dfview(df::DataFrame, label::Dict = Dict(); width=800, height=850)
             "\",etype:\"",etyp,"\",nval:",nrows-nmiss[i],",pmiss:\"",pmiss,"\"")
 
         # if label dictionary is provided
-        if length(label) > 0
+        if label != nothing
             # label name
-            lblname = label["label"][varnames[i]]
+            lblname = label.lblname[varnames[i]]
             # variable label
-            varlab = label["variable"][varnames[i]]
-            print(bdata,",lblname:\"",lblname,"\",varlab:\"",replace(varlab,"\"","\\\""),"\"")
+            vrlab = varlab(label,varnames[i])
+            print(bdata,",lblname:\"",lblname,"\",varlab:\"",replace(vrlab,"\"","\\\""),"\"")
         end
 
         println(bdata, "},")
