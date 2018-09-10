@@ -139,7 +139,7 @@ function dfview(df::DataFrame, label::Union{Label,Nothing} = nothing; from = 1, 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>DataFrame Table of Contents</title>
+  <title>DataFrame Data View</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/3.5.3/css/tabulator.min.css" rel="stylesheet">
 </head>
 <body style="margin:0;padding:0;font-family:Arial,Helvetica,Tahoma;">
@@ -176,9 +176,9 @@ function dfview(df::DataFrame, label::Union{Label,Nothing} = nothing; from = 1, 
                 str = ismissing(df[i,varnames[j]]) ? "" : string(df[i,varnames[j]])
                 print(bdata,",",string("f_",varnames[j]),":\"",str,"\"")
             elseif ismissing(df[i,varnames[j]])
-                print(bdata,",",string("f_",varnames[j]),":")
+                print(bdata,",",string("f_",varnames[j]),":\"\"")
             else
-                print(bdata,",",string("f_",varnames[j]),":",df[i,varnames[j]])
+                print(bdata,",",string("f_",varnames[j]),":\"",df[i,varnames[j]],"\"")
             end
         end
         println(bdata,"},")
@@ -188,12 +188,11 @@ function dfview(df::DataFrame, label::Union{Label,Nothing} = nothing; from = 1, 
 
     println(bdata,"""
     \$("#df-table").tabulator({
-    height:800,
     data:tabledata,
-    layout:"fitColumns",
+    layout:"fitData",
     columns:[""")
 
-    println(bdata,"{title:\"Row\",field:\"id\",align:\"right\"},")
+    println(bdata,"{title:\"Row\",field:\"id\",align:\"right\",headerSort:false},")
     for i=1:ncols
         if occursin("Str",etype(df,varnames[i]))
             align="left"
@@ -201,7 +200,7 @@ function dfview(df::DataFrame, label::Union{Label,Nothing} = nothing; from = 1, 
             align="right"
         end
 
-        println(bdata,"\t{title:\"",string(varnames[i]),"\",field:\"",string("f_",varnames[i]),"\",align:\"",align,"\"},")
+        println(bdata,"\t{title:\"",string(varnames[i]),"\",field:\"",string("f_",varnames[i]),"\",align:\"",align,"\",headerSort:false},")
     end
     println(bdata,"""
     ],
