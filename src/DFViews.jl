@@ -11,7 +11,7 @@ function eltype3(df::DataFrame,v::Symbol)
     return Missings.T(eltype(df[v]))
 end
 
-function dfbrowser(df::DataFrame; start=1)
+function dfview(df::DataFrame; start=1)
 
     # df - dataframe name
     (nrow,ncol) = size(df)
@@ -31,7 +31,7 @@ function dfbrowser(df::DataFrame; start=1)
     # add data to the listStore
     #row_array = Array{Any,1}(ncol)
     aa = Array{Any}(undef,ncol)
-    for i in start:(nrow > 100 ? 100 : nrow)
+    for i in start:(nrow > 1000 ? 1000 : nrow)
         for j in 1:ncol
             aa[j] = ismissing(df[i,j]) ? "" : string(df[i,j])
         end
@@ -62,8 +62,8 @@ function dfbrowser(df::DataFrame; start=1)
 	# add a Frame with scollbars
 	sw = GtkScrolledWindow(tv)
 	# setproperty!(sw,:shadow_type,2)
-	set_gtk_property!(sw,:scrollbar_within_bevel, true)
-	set_gtk_property!(sw,:scrollbar_spacing,3)
+	#set_gtk_property!(sw,:scrollbar_within_bevel, true)
+	#set_gtk_property!(sw,:scrollbar_spacing,3)
 	# setproperty!(sw,:hscrollbar_policy,1) # automatic
 	# setproperty!(sw,:vscrollbar_policy,1) # automatic
 
@@ -75,7 +75,7 @@ function dfbrowser(df::DataFrame; start=1)
     Gtk.showall(win)
 end
 
-function dfdesc2(df::DataFrame,labels::Union{Nothing,Label} = nothing)
+function dfdesc(df::DataFrame,labels::Union{Nothing,Label} = nothing)
 
     # df - dataframe name
     (nrow,ncol) = size(df)
@@ -158,8 +158,8 @@ function dfdesc2(df::DataFrame,labels::Union{Nothing,Label} = nothing)
 	# add a Frame with scollbars
 	sw = GtkScrolledWindow(tv)
 	# setproperty!(sw,:shadow_type,2)
-	set_gtk_property!(sw,:scrollbar_within_bevel, true)
-	set_gtk_property!(sw,:scrollbar_spacing,3)
+	# set_gtk_property!(sw,:scrollbar_within_bevel, true)
+	# set_gtk_property!(sw,:scrollbar_spacing,3)
 	# setproperty!(sw,:hscrollbar_policy,1) # automatic
 	# setproperty!(sw,:vscrollbar_policy,1) # automatic
 
