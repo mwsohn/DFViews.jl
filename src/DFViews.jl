@@ -1,228 +1,177 @@
 module DFViews
 
-using DataFrames, Electron, Labels
+using DataFrames, Gtk, Dates, Stella, Labels
 
 export dfview, dfdesc
 
-function getmaxwidth(vec::AbstractVector)
-    return maximum(length.(collect(skipmissing(vec))))
-end
-
-function atype(df::DataFrame,v::Symbol)
-    # Array type = DA for DataArray, CA for Categorical Array, and UV for Union Vector
-    if isdefined(Main,:CategoricalArrays) && typeof(df[v]) <: CategoricalArray
-        return string("Categorical (",replace(string(eltype(df[v].refs)),"UInt" => ""),")")
-    elseif isdefined(Main,:DataArrays) && typeof(df[v]) <: DataArray
-         return "DataArray"
-    elseif isdefined(Main,:PooledArrays) && typeof(df[v]) <: PooledArray
-         return "PooledArray"
-    elseif isa(eltype(df[v]),Union)
-        return "Union Vector" # Union Vector
-    else
-        return "Vector"
-    end
-end
-
-function etype(df::DataFrame,v::Symbol)
-    # Eltype
+function eltype3(df::DataFrame,v::Symbol)
     if typeof(df[v]) <: CategoricalArray
-        eltyp = string(eltype(df[v].pool.index))
-        if in(eltyp,["String","AbstractString"])
-            eltyp = string("Str",getmaxwidth(df[v].pool.index))
-        end
-    else
-        eltyp = string(Missings.T(eltype(df[v])))
-        if in(eltyp,["String","AbstractString"])
-            eltyp = string("Str",getmaxwidth(df[v]))
-        elseif eltyp in ["Dates.Date","Dates.DateTime"]
-            eltyp = replace(eltyp,r"^Dates\." => "")
-        end
+        return eltype(df[v].pool.index)
     end
-
-    return eltyp
+    return Missings.T(eltype(df[v]))
 end
 
-function dfdesc(df::DataFrame, label::Union{Label,Nothing} = nothing; width=800, height=850)
+function dfbrowser(df::DataFrame; start=1)
 
-    bdata = IOBuffer()
+    # df - dataframe name
+    (nrow,ncol) = size(df)
 
-    print(bdata,"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <title>DataFrame Table of Contents</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/3.5.3/css/tabulator.min.css" rel="stylesheet">
-</head>
-<body style="margin:0;padding:0;font-family:Arial,Helvetica,Tahoma;">
-<div id="df-table"></div>
-
-<!-- Insert this line above script imports  -->
-<script>if (typeof module === 'object') {window.module = module; module = undefined;}</script>
-<script
-    src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
-    integrity="sha256-3edrmyuQ0w65f8gfBsqowzjJe2iM6n0nKciPUp8y+7E="
-    crossorigin="anonymous"></script>
-<script
-    src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
-    integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="
-    crossorigin="anonymous"></script>
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/3.5.3/js/tabulator.min.js"></script>
-<script type="text/javascript">
-    var tabledata = [
-""")
-
+    # variable names
     varnames = names(df)
-    nrows = size(df,1)
-    nmiss = DataFrames.colmissing(df)
-    for i=1:size(df,2)
-        varname = string(varnames[i])
-        atyp = atype(df,varnames[i])
-        etyp = etype(df,varnames[i])
-        pmiss = string(round(100 * nmiss[i]/nrows,digits=1),"%")
 
-        print(bdata,"\t{id:",i,",varname:\"",varname,"\",atype:\"",atyp,
-            "\",etype:\"",etyp,"\",nval:",nrows-nmiss[i],",pmiss:\"",pmiss,"\"")
+    # data types
+    etypes = Vector{DataType}()
+    for v in names(df)
+        push!(etypes,String)
+    end
 
-        # if label dictionary is provided
-        if label != nothing
-            # label name
-            lname = lblname(label,varnames[i]) == nothing ? "" : string(lblname(label,varnames[1]))
-            # variable label
-            vrlab = varlab(label,varnames[i])
-            print(bdata,",lblname:\"",lname,"\",varlab:\"",replace(vrlab,"\"" => "\\\""),"\"")
+    # define a listStore
+    ls = GtkListStore(Int64,etypes...)
+
+    # add data to the listStore
+    #row_array = Array{Any,1}(ncol)
+    aa = Array{Any}(undef,ncol)
+    for i in start:(nrow > 100 ? 100 : nrow)
+        for j in 1:ncol
+            aa[j] = ismissing(df[i,j]) ? "" : string(df[i,j])
         end
-
-        println(bdata, "},")
+        push!(ls,tuple(i, aa...))
     end
-    println(bdata, "];")
 
-    println(bdata,"""
-    \$("#df-table").tabulator({
-    height:800,
-    data:tabledata,
-    layout:"fitColumns",
-    columns:[
-        {title:"Num",field:"id",sorter:"number",align:"right",width:65,headerTooltip:"Variable Number"},
-        {title:"Variable Name",field:"varname",sorter:"string",align:"left",minWidth:100,headerTooltip:true},
-        {title:"Array Type",field:"atype",sorter:"string",align:"left",headerTooltip:true},
-        {title:"Eltype",field:"etype",sorter:"string",align:"left",width:80,headerTooltip:"Data type of array elements"},
-        {title:"Values",field:"nval",sorter:"number",align:"right",width:70,formatter:"money",formatterParams:{precision:0},headerTooltip:"Number of non-missing values"},
-        {title:"Missing",field:"pmiss",sorter:"number",align:"right",width:70,headerTooltip:"Percent missing"},
-        {title:"Label Name",field:"lblname",sorter:"string",align:"left",width:70,headerTooltip:"Value Label Name"},
-        {title:"Variable Definition",field:"varlab",sorter:"string",align:"left",minWidth:200,headerTooltip:"Vaiable Label"},
-    ],
-});
-</script>
-</body>
-</html>
+    # TreeView
+    tv = GtkTreeView(GtkTreeModel(ls))
 
-""")
+    # let's put borders around the cells
+    set_gtk_property!(tv,:enable_grid_lines,3)
 
-    fn = tempdir() * "dfdesc_table.html"
-    if isfile(fn)
-        rm(fn)
-    end
-    println(fn)
-    fout = open(fn,"w")
-    print(fout,String(take!(bdata)))
-    close(fout)
+    # variable names on the column headings
+    r = GtkCellRendererText()
 
-    Window(URI(fn),options=Dict("width"=>width,"height"=>height,"x"=>0,"y"=>0))
-
-end
-
-function dfview(df::DataFrame, label::Union{Label,Nothing} = nothing; from = 1, maxrows = 1000, width=800, height=850)
-
-    bdata = IOBuffer()
-
-    print(bdata,"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <title>DataFrame Data View</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/3.5.3/css/tabulator.min.css" rel="stylesheet">
-</head>
-<body style="margin:0;padding:0;font-family:Arial,Helvetica,Tahoma;">
-<div id="df-table"></div>
-
-<!-- Insert this line above script imports  -->
-<script>if (typeof module === 'object') {window.module = module; module = undefined;}</script>
-<script
-    src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
-    integrity="sha256-3edrmyuQ0w65f8gfBsqowzjJe2iM6n0nKciPUp8y+7E="
-    crossorigin="anonymous"></script>
-<script
-    src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
-    integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="
-    crossorigin="anonymous"></script>
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/3.5.3/js/tabulator.min.js"></script>
-<script type="text/javascript">
-    var tabledata = [
-""")
-
-    varnames = names(df)
-    nrows,ncols = size(df)
-
-    to = min(nrows,maxrows + from - 1)
-
-    for i=from:to
-
-        print(bdata,"\t{id:",i)
-        for j=1:ncols
-            if occursin("Str",etype(df,varnames[j]))
-                str = ismissing(df[i,varnames[j]]) ? "" : df[i,varnames[j]]
-                print(bdata,",",string("f_",varnames[j]),":\"",str,"\"")
-            elseif etype(df,varnames[j]) in ["Date","DateTime"]
-                str = ismissing(df[i,varnames[j]]) ? "" : string(df[i,varnames[j]])
-                print(bdata,",",string("f_",varnames[j]),":\"",str,"\"")
-            elseif ismissing(df[i,varnames[j]])
-                print(bdata,",",string("f_",varnames[j]),":\"\"")
-            else
-                print(bdata,",",string("f_",varnames[j]),":\"",df[i,varnames[j]],"\"")
-            end
-        end
-        println(bdata,"},")
-
-    end
-    println(bdata, "];")
-
-    println(bdata,"""
-    \$("#df-table").tabulator({
-    data:tabledata,
-    layout:"fitData",
-    columns:[""")
-
-    println(bdata,"{title:\"Row\",field:\"id\",align:\"right\",headerSort:false},")
-    for i=1:ncols
-        if occursin("Str",etype(df,varnames[i]))
-            align="left"
+    # setproperty!(r,:xalign, 1.) # left justification
+    c = GtkTreeViewColumn("Obs", r, Dict([("text",0)]))
+    push!(tv,c)
+    for (i,v) in enumerate(varnames)
+        if eltype3(df,v) <: Number
+            set_gtk_property!(r,:xalign,1)
         else
-            align="right"
+            set_gtk_property!(r,:xalign,0)
+        end
+        push!(tv,GtkTreeViewColumn(string(v), r, Dict([("text",i)])))
+    end
+
+	# add a Frame with scollbars
+	sw = GtkScrolledWindow(tv)
+	# setproperty!(sw,:shadow_type,2)
+	set_gtk_property!(sw,:scrollbar_within_bevel, true)
+	set_gtk_property!(sw,:scrollbar_spacing,3)
+	# setproperty!(sw,:hscrollbar_policy,1) # automatic
+	# setproperty!(sw,:vscrollbar_policy,1) # automatic
+
+    # create a frame and add it to the window
+    nrows = start + 999
+    win = GtkWindow(sw,"DataFrame - $nrow rows, $ncol columns - Rows $start - $nrows" , 500, 300)
+    # push!(win,sw)
+
+    Gtk.showall(win)
+end
+
+function dfdesc2(df::DataFrame,labels::Union{Nothing,Label} = nothing)
+
+    # df - dataframe name
+    (nrow,ncol) = size(df)
+
+    # variable names
+    varnames = names(df)
+
+    # define a listStore
+    if labels == nothing
+        # Row, Variable Name, Atype, Eltype, N Missing, P Missing
+        ls = GtkListStore(Int,String,String,String,Int,String)
+    else
+        # Row, Variable Name, Atype, Eltype, N Missing, P Missing, Lblname, Description
+        ls = GtkListStore(Int,String,String,String,Int,String,String,String)
+    end
+
+    # add data to the listStore
+    aa = Array{Any}(undef,labels == nothing ? 6 : 8)
+
+    # number of missing values in each column
+    nmiss = DataFrames.colmissing(df)
+
+    for i in 1:ncol
+        # row
+        aa[1] = i
+
+        # variable name
+        aa[2] = string(varnames[i])
+
+        # array type
+        aa[3] = Stella.atype(df,varnames[i])
+
+        # eltype
+        aa[4] = Stella.etype(df,varnames[i])
+
+        # number of rows with missing values
+        aa[5] = nmiss[i]
+
+        # percent missing
+        aa[6] = string( round(100 * nmiss[i] / size(df,1), digits = 2), "%")
+
+        if labels != nothing
+
+            # label name
+            lname = Labels.lblname(labels,varnames[i])
+            aa[7] = lname == nothing ? "" : string(lname)
+
+            # variable description
+            aa[8] = Labels.varlab(labels,varnames[i])
         end
 
-        println(bdata,"\t{title:\"",string(varnames[i]),"\",field:\"",string("f_",varnames[i]),"\",align:\"",align,"\",headerSort:false},")
+        push!(ls,tuple(aa...))
     end
-    println(bdata,"""
-    ],
-});
-</script>
-</body>
-</html>
 
-""")
+    # TreeView
+    tv = GtkTreeView(GtkTreeModel(ls))
 
-    fn = tempdir() * "dfview_table.html"
-    if isfile(fn)
-        rm(fn)
+    # let's put borders around the cells
+    set_gtk_property!(tv,:enable_grid_lines,3)
+
+    # variable names on the column headings
+    r = GtkCellRendererText()
+
+    # setproperty!(r,:xalign, 1.) # left justification
+    set_gtk_property!(r,:xalign,1)
+    push!(tv,GtkTreeViewColumn("Num", r, Dict([("text",0)])))
+    for (i,v) in enumerate(["Variable Name","Array Type","Eltype","N Miss","% Miss","Lblname","Description"])
+        if labels == nothing && i > 5
+            continue
+        end
+        r = GtkCellRendererText()
+        if i in [4,5]
+            set_gtk_property!(r,:xalign,1)
+        else
+            set_gtk_property!(r,:xalign,0)
+        end
+        push!(tv,GtkTreeViewColumn(v, r, Dict([("text",i)])))
     end
-    println(fn)
-    fout = open(fn,"w")
-    print(fout,String(take!(bdata)))
-    close(fout)
 
-    Window(URI(fn),options=Dict("width"=>width,"height"=>height,"x"=>0,"y"=>0))
+	# add a Frame with scollbars
+	sw = GtkScrolledWindow(tv)
+	# setproperty!(sw,:shadow_type,2)
+	set_gtk_property!(sw,:scrollbar_within_bevel, true)
+	set_gtk_property!(sw,:scrollbar_spacing,3)
+	# setproperty!(sw,:hscrollbar_policy,1) # automatic
+	# setproperty!(sw,:vscrollbar_policy,1) # automatic
 
+    # create a frame and add it to the window
+    w = labels == nothing ? 450 : 750
+    h = ncol > 25 ? 800 : 30 * ncol
+    win = GtkWindow(sw,"DataFrame Table of Contents" , w, h)
+    # push!(win,sw)
+
+    Gtk.showall(win)
 end
+
 
 
 end # module
