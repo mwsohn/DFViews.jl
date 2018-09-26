@@ -110,8 +110,8 @@ function dfdesc(df::DataFrame,labels::Union{Nothing,Label} = nothing)
     # add data to the listStore
     aa = Array{Any}(undef,labels == nothing ? 6 : 8)
 
-    # number of missing values in each column
-    nmiss = DataFrames.colmissing(df)
+    # number of missing values in each column - DataFrames.colmissing is not working
+    nmiss = [nrow - sum(completecases(df[[s]])) for s in names(df)]
 
     for i in 1:ncol
         # row
