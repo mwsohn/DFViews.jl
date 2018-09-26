@@ -11,6 +11,10 @@ function eltype3(df::DataFrame,v::Symbol)
     return Missings.T(eltype(df[v]))
 end
 
+function colmissing(df)
+    return [size(df,1) - sum(completecases(df[[s]])) for s in names(df)]
+end
+
 """
     dfview(df::DataFrame; start=1,maxrows=1000)
 
@@ -111,7 +115,7 @@ function dfdesc(df::DataFrame,labels::Union{Nothing,Label} = nothing)
     aa = Array{Any}(undef,labels == nothing ? 6 : 8)
 
     # number of missing values in each column - DataFrames.colmissing is not working
-    nmiss = [nrow - sum(completecases(df[[s]])) for s in names(df)]
+    nmiss = colmissing(df)
 
     for i in 1:ncol
         # row
